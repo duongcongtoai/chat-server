@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package chatinfra;
+
+import "google/protobuf/timestamp.proto";
+
+message SendMessageRequest {
+  string user_id = 1;
+  string message = 2;
+}
+
+message SendMessageResponse {
+  /* string message_id = 1;
+  string local_message_id = 2; */
+}
+
+message MessageResponse {
+  /* string message_id = 1;
+  string conversation_id = 2; */
+  string user_id = 1;
+  string content = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+
+
+message SeenMessageRequest { string conversation_id = 1; }
+
+message SeenMessageResponse {}
+
+
+
+
+
+
+message PingRequest { 
+    string session_id = 1;
+    string user_id = 2;
+}
+
+message PingResponse {}
+
+message SubscribeRequest {
+    string user_id = 1;
+}
+message EventPing { string session_id = 1; }
+message Event {
+  oneof event {
+    MessageResponse event_new_message = 1;
+    EventPing event_ping = 2;
+  }
+}
+
+message SubscribeResponse { Event event = 1; }
+
+service ChatService {
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {}
+
+  rpc SeenMessage(SeenMessageRequest) returns (SeenMessageResponse) {}
+
+  rpc Subscribe(SubscribeRequest) returns (stream Event) {};
+
+  rpc Ping(PingRequest)
+      returns (PingResponse) {};
+}

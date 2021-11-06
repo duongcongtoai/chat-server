@@ -1,0 +1,31 @@
+[package]
+name = "chat"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+
+[[bin]]
+name = "chat-server"
+path = "src/server.rs"
+
+
+[dependencies]
+async-recursion = "0.2"
+futures-core = "0.3"
+futures-util = "0.3"
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-stream = "0.1"
+uuid = { version = "0.8", features = ["serde", "v4"] }
+async-stream = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rand = "0.7"
+
+tonic = "0.4.2" # Rust gRPC implementation
+prost = "0.7.0" # Rust Protocol Buffers implementation
+prost-types = "0.7.0" # Contains definitions of Protocol Buffers well-known types
+[build-dependencies]
+tonic-build = "0.4.2"
