@@ -24,8 +24,10 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = "0.7"
 
+fnv = "1.0.7"
 tonic = "0.4.2" # Rust gRPC implementation
 prost = "0.7.0" # Rust Protocol Buffers implementation
 prost-types = "0.7.0" # Contains definitions of Protocol Buffers well-known types
+futures-intrusive = "0.4.0"
 [build-dependencies]
 tonic-build = "0.4.2"

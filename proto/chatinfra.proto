@@ -3,10 +3,13 @@ syntax = "proto3";
 package chatinfra;
 
 import "google/protobuf/timestamp.proto";
+option go_package = "chatgo/goproto";
+
 
 message SendMessageRequest {
-  string user_id = 1;
+  string sender_id = 1;
   string message = 2;
+  string receiver_id = 3;
 }
 
 message SendMessageResponse {
