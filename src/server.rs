@@ -7,7 +7,6 @@ use chatinfra::{
 };
 use drop::DropReceiver;
 use fnv::FnvHasher;
-use futures_intrusive::channel::shared::{self, Receiver, Sender};
 use std::collections::HashMap;
 use std::hash::Hasher;
 use std::pin::Pin;
@@ -34,7 +33,6 @@ struct BroadcastConn {
     channel: broadcast::Sender<Message>,
     total_client: i32,
 }
-#[derive(Debug)]
 struct Registry {
     client_stream: mpsc::Sender<Result<Event, Status>>,
     close_chan: UnboundedReceiver<usize>,
@@ -50,8 +48,7 @@ struct Message {
 
 struct Hub {
     new_msg_sender: mpsc::Sender<Message>,
-    // new_registry_senderv2: mpsc::Sender<Registry>,
-    new_registry_sender: shared::UnbufferedSender<Registry>,
+    new_registry_sender: mpsc::Sender<Registry>,
 }
 struct MultipleHub {
     hubs: Arc<Vec<Hub>>,
@@ -191,45 +188,21 @@ impl ChatService for Hub {
             })
             .await;
         match ret {
-            Ok(()) => {}
-            Err(registry) => {
-                return Err(Status::new(
-                    tonic::Code::Internal,
-                    format!(
-                        "err broadcasting to internal registration channel {:?}",
-                        registry,
-                    ),
-                ));
-            }
-        }
-        let ret = self
-            .new_msg_sender
-            .send(Message {
-                user_id: request.get_ref().user_id.clone(),
-                msg: event::Event::EventPing(EventPing {
-                    session_id: session_id.to_string(),
-                }),
-            })
-            .await;
-
-        match ret {
             Ok(()) => Ok(Response::new(to_return)),
-            Err(send_err) => {
-                return Err(Status::new(
-                    tonic::Code::Internal,
-                    format!(
-                        "err broadcasting to internal message channel to send initial ping {}",
-                        send_err.to_string()
-                    ),
-                ));
-            }
+            Err(send_err) => Err(Status::new(
+                tonic::Code::Internal,
+                format!(
+                    "err broadcasting to internal registration channel {}",
+                    send_err.to_string()
+                ),
+            )),
         }
     }
 }
 
 impl Hub {
     async fn new() -> Self {
-        let (new_registry_sender, new_registry_chan) = shared::unbuffered_channel();
+        let (new_registry_sender, new_registry_chan) = mpsc::channel::<Registry>(1);
         let (new_msg_sender, new_msg_chan) = mpsc::channel::<Message>(1);
         let (deregistry_sender, deregistry_chan) = mpsc::channel::<Registry>(1);
         let ret = Hub {
@@ -249,7 +222,7 @@ impl Hub {
     }
     async fn start(
         deregistry_sender: mpsc::Sender<Registry>,
-        mut new_registry_chan: Receiver<Registry>,
+        mut new_registry_chan: mpsc::Receiver<Registry>,
         mut new_msg_chan: mpsc::Receiver<Message>,
         mut deregistry_chan: mpsc::Receiver<Registry>,
     ) {
@@ -287,26 +260,41 @@ impl Hub {
                         }
                     }
                 }
-                new_registry = new_registry_chan.receive() => {
+                new_registry = new_registry_chan.recv() => {
                     match new_registry {
                         None => unimplemented!(),
                         Some(new_registry) => {
                             match conns_list.get_mut(&new_registry.user_id) {
                                 None => {
                                     let (tx,  rx1) = broadcast::channel::<Message>(10);
-                                    conns_list.insert(String::from(&new_registry.user_id),BroadcastConn{
-                                        // user_id: String::from(&new_registry.user_id),
+                                    let broadcast_chann = BroadcastConn{
                                         channel: tx,
                                         total_client:1,
-                                    });
+                                    };
+                                    let user_id = new_registry.user_id.clone();
+                                    let ping_msg = Message{
+                                        user_id: new_registry.user_id.clone(),
+                                        msg: event::Event::EventPing(EventPing{
+                                            session_id: new_registry.session_id.clone(),
+                                        }),
+                                    };
                                     let deregistry_chan_2 = deregistry_sender.clone();
                                     tokio::spawn(async move {Self::push_client_loop(deregistry_chan_2,rx1,new_registry).await});
+                                    broadcast_chann.channel.send(ping_msg).unwrap();
+                                    conns_list.insert(user_id,broadcast_chann);
                                 },
                                 Some(mut broadcast_chann) => {
-                                    let  rxn = broadcast_chann.channel.subscribe();
+                                    let rxn = broadcast_chann.channel.subscribe();
                                     broadcast_chann.total_client +=1;
                                     let deregistry_chan_2 = deregistry_sender.clone();
+                                    let ping_msg = Message{
+                                        user_id: new_registry.user_id.clone(),
+                                        msg: event::Event::EventPing(EventPing{
+                                            session_id: new_registry.session_id.clone(),
+                                        }),
+                                    };
                                     tokio::spawn(async move {Self::push_client_loop(deregistry_chan_2,rxn,new_registry).await});
+                                    broadcast_chann.channel.send(ping_msg).unwrap();
                                 }
                             }
                         }
